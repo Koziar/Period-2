@@ -21,22 +21,22 @@
 var session = require("express-session");
 
 // Use the session middleware
-app.use(session({secret:'secret_3162735',saveUninitialized:true, resave: true}));
+app.use(session({secret: 'secret_3162735', saveUninitialized: true, resave: true}));
 
 // Access the session as req.session.        The request property req.session is used to store or access session data.
 app.use(function (req, res, next) {
-	var session = req.session;
-	if (session.userName) {
-		return next();
-	} else {
-		if (req.body.userName) {
-			session.userName = req.body.userName;
-			return res.redirect('/');
-		} else {
-			req.url = '/login';
-			return next();
-		}
-	}
+    var session = req.session;
+    if (session.userName) {
+        return next();
+    } else {
+        if (req.body.userName) {
+            session.userName = req.body.userName;
+            return res.redirect('/');
+        } else {
+            req.url = '/login';
+            return next();
+        }
+    }
 });
 
 // The use of cookies in this project is in the router folder in the index.js file. Here is a small ex of this.
@@ -45,18 +45,18 @@ var express = require('express');
 var jokes = require('../model/jokes'); // My own implementation.
 var router = express.Router();
 
-router.get('/random', function(req, res, next){
-	if(req.session.jokeCount){
-		req.session.jokeCount++;
-	}
-	else{
-		req.session.jokeCount =1;
-	}
-	console.log("*** Du har set en ny joke "+req.session.jokeCount+" gange");
+router.get('/random', function (req, res, next) {
+    if (req.session.jokeCount) {
+        req.session.jokeCount++;
+    }
+    else {
+        req.session.jokeCount = 1;
+    }
+    console.log(req.session.jokeCount);
 
-	res.render('randomjoke',{   // the jade file name (randomjoke)
-		random: jokes.getRandomJoke() // the variable in the file (random)
-	});
+    res.render('randomjoke', {   // the jade file name (randomjoke)
+        random: jokes.getRandomJoke() // the variable in the file (random)
+    });
 });
 
 // In the laout jade file I have included two scripts that tell the user that the site contains cookie:
