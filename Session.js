@@ -1,65 +1,114 @@
-// The reason we use sessions is because HTTP is a Stateless Protocol. Each request for a Web page or URL results
-// in the requested pages being served, but without the Web (HTTP) server remembering the request later. In other
-// words, there is no recorded continuity. Each communication is discrete and unrelated to those that precede or
-// follow. Session is a way to store that information.
-// A user's session for a website exists in temporary memory only while the user is reading and navigating the website.
-// Web browsers normally delete session cookies when the user closes the browser.
-// Session data is not saved in the cookie itself, just the session ID. Session data is stored server-side.
-// Client-side sessions use cookies and cryptographic techniques to maintain state without storing as much data on the server.
+/*
 
-// A cookie is a small piece of data that a website asks your browser to store on your computer or mobile device.
-// The cookie allows the website to "remember" your actions or preferences over time. Most browsers support cookies,
-// but users can set their browsers to decline them and can delete them whenever they like.
-// JavaScript code is able to read a cookie belonging to its domain and perform an action accordingly.
-// EUROPE websites must follow the Commission's guidelines on privacy and data protection and inform users that cookies
-// are not being used to gather information unnecessarily.
-// The ePrivacy directive requires prior informed consent for storage of or access to information stored on a user's
-// terminal equipment. In other words, you must ask users if they agree to most cookies and similar technologies
-// (e.g. web beacons, Flash cookies, etc.) before the site starts to use them.
+ 6. Explain, using relevant examples, how to implement sessions,
+ 	and the legal implications of doing this
 
-// Install the session middelware
-var session = require("express-session");
+ */
+//------------------------------------------------------------------------------------------------------------------
 
-// Use the session middleware
-app.use(session({secret: 'secret_3162735', saveUninitialized: true, resave: true}));
-
-// Access the session as req.session.        The request property req.session is used to store or access session data.
-app.use(function (req, res, next) {
-    var session = req.session;
-    if (session.userName) {
-        return next();
-    } else {
-        if (req.body.userName) {
-            session.userName = req.body.userName;
-            return res.redirect('/');
-        } else {
-            req.url = '/login';
-            return next();
-        }
-    }
-});
-
-// The use of cookies in this project is in the router folder in the index.js file. Here is a small ex of this.
-
+/* ***** Session? *****
+	When a user first logs in or registers for your site, you know who they are because
+	they just submitted their information to your server. You can use that information to create
+	a new record in your database or retrieve an existing one - simple!
+	But how do you keep them authenticated when they do something crazy like reload the page?
+	Magic, that’s how! Also known as sessions...
+	That being said, a ‘session’ is a squishy, abstract term for keeping users logged in.
+	We care more about the actual mechanism for persisting authentication; namely, cookies.
+	The most delicious part of user management:
+	Cookies allow you to store a user’s information inside a file on the their browser.
+	The browser then sends that info back on every request, allowing your application to identify
+	the user and customize their experience. Which is objectively way better than asking for a
+	username and password on every request.
+*/
+//----------The real basic setup for a session:--------------
 var express = require('express');
-var jokes = require('../model/jokes'); // My own implementation.
-var router = express.Router();
+var app = express();
 
-router.get('/random', function (req, res, next) {
-    if (req.session.jokeCount) {
-        req.session.jokeCount++;
-    }
-    else {
-        req.session.jokeCount = 1;
-    }
-    console.log(req.session.jokeCount);
+app.use(express.cookieParser());
+app.use(express.session({secret: '1234567890QWERTY'}));
+//...
 
-    res.render('randomjoke', {   // the jade file name (randomjoke)
-        random: jokes.getRandomJoke() // the variable in the file (random)
-    });
+//How to access the session object through the request:
+app.get('/awesome', function(req, res) {
+	if(req.session.lastPage) {
+		res.write('Last page was: ' + req.session.lastPage + '. ');
+	}
+
+	req.session.lastPage = '/awesome';
+	res.send('Your Awesome.');
+});
+//-----------------------------------------------------------
+//Another way of dealing with sessions:
+//Import library to your app
+var session = require('client-sessions');
+
+//Next, add session handler middleware to your app.js file and set these basic configuration options:
+app.use(session({
+	cookieName: 'session',
+	secret: 'random_string_goes_here',
+	duration: 30 * 60 * 1000,
+	activeDuration: 5 * 60 * 1000,
+}));
+/*
+ 1 - The secret is a random, high-entropy string you create to encrypt the cookie. We need to take this
+ step because the browser is an inherently untrusted environment; anyone with access can open
+ it up and see what’s stored in there. Client-sessions will encrypt and decrypt all the cookie
+ values so you don’t have to worry about prying eyes. This is a big part of why we recommend using
+ a library to manage sessions. It’s never a good idea to roll your own crypto and unencrypted
+ cookies are a non-starter.
+
+ 2 - The duration defines how long the session will live in milliseconds. After that, the cookie is
+ invalidated and will need to be set again. You probably experience this behavior daily on sites
+ that deal with secure data. Your banking portal, for instance (hopefully).
+
+ 3 - Finally, activeDuration allows users to lengthen their session by interacting with the site.
+ If the session is 28 minutes old and the user sends another request, activeDuration will extend the
+ session’s life for however long you define. In this case, 5 minutes. In short, activeDuration
+ prevents the app from logging a user out while they’re still using the site.
+ */
+//To successfully use the cookie via a route:
+app.post('/login', function(req, res) {
+	User.findOne({ email: req.body.email }, function(err, user) {
+		if (!user) {
+			res.render('login.jade', { error: 'Invalid email or password.' });
+		} else {
+			if (req.body.password === user.password) {
+				// sets a cookie with the user's info
+				req.session.user = user;
+				res.redirect('/dashboard');
+			} else {
+				res.render('login.jade', { error: 'Invalid email or password.' });
+			}
+		}
+	});
 });
 
-// In the laout jade file I have included two scripts that tell the user that the site contains cookie:
+//There are a few more steps to properly secure the session. The first is simply to make sure
+//your app resets the session when a user logs out. Something like this would do the trick:
+app.get('/logout', function(req, res) {
+	req.session.reset();
+	res.redirect('/');
+});
 
-// script(src='/javascripts/cookie_config.js' type='text/javascript')
-// script(src='/javascripts/consent.js' type='text/javascript')
+/*
+ Next, make sure to use SSL so your application only communicates with the browser over
+ an encrypted channel. With SSL in place, there are a few additional security options to set on client-sessions:
+ 1. 'httpOnly' prevents browser JavaScript from accessing cookies.
+ 2. 'secure' ensures cookies are only used over HTTPS
+ 3. 'ephemeral' deletes the cookie when the browser is closed. Ephemeral cookies are particularly important
+ if you your app lends itself to use on public computers.
+ */
+//To recap, here’s the updated configuration:
+app.use(session({
+	cookieName: 'session',
+	secret: 'eg[isfd-8yF9-7w2315df{}+Ijsli;;to8',
+	duration: 30 * 60 * 1000,
+	activeDuration: 5 * 60 * 1000,
+	httpOnly: true,
+	secure: true,
+	ephemeral: true
+}));
+
+
+//------------------------------------------------------------------------------------------------------------------
+// Source -> https://stormpath.com/blog/everything-you-ever-wanted-to-know-about-node-dot-js-sessions/
