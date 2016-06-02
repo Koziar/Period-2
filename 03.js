@@ -1,38 +1,58 @@
 /*
 
  3. Explain strategies to implement a Node.js based server architecture that still could
- 	take advantage of a multi-core server.
+ take advantage of a multi-core server.
 
  */
 //------------------------------------------------------------------------------------------------------------------
-/*
- Node is using non­threaded, event driven model to create a non­blocking API.
- A single instance of Node.js runs in a single thread.
- To take advantage of multi-core systems the user will sometimes want to launch
- a cluster of Node.js processes to handle the load.
- The cluster module allows you to easily create child processes that all share server ports.
 
- https://nodejs.org/api/cluster.html
- */
+// Even though Node uses a Single Threaded strategy, it is easy to scale it to multi-core machines. For CPU intensive
+// task Node.js can fire up child processes, and for scaling up webservices the trick is to start multiple node
+// instances on the fly. Node has built in support for this via the Clustering module and Express run multiple virtual
+// hosts (i.e. run multiple domains under one IP) out of the box.
 
-const cluster = require('cluster');
-const http = require('http');
-const numCPUs = require('os').cpus().length;
+// The Cluster module allows you to create a small network of separate processes(workers) which share server ports with
+// the main Node process(master).This gives your Node.js app access to the full power of your server. A cluster module
+// executes the same Node.js process multiple times. Therefore, the first thing you need to do is to identify what
+// portion of the code is for the master process and what portion is for the workers. The master process is the process
+// you initiate, which in turn initialize the workers. To start a worker process inside a master process, we’ll use the
+// fork() method.
 
-if (cluster.isMaster) {
-    // Fork workers.
-    for (var i = 0; i < numCPUs; i++) {
+var cluster = require('cluster');                       // Include the cluster module
+
+if (cluster.isMaster) {                           // Code to run if we're in the master process:
+
+    var cpuCount = require('os').cpus().length;                 // Count the machine's CPUs
+
+    for (var i = 0; i < cpuCount; i += 1) {                     // Create a worker for each CPU
         cluster.fork();
-    }
 
-    cluster.on('exit', (worker, code, signal) => {
-        console.log(`worker ${worker.process.pid} died`);
-});
-} else {
-    // Workers can share any TCP connection
-    // In this case it is an HTTP server
-    http.createServer((req, res) => {
-        res.writeHead(200);
-    res.end('hello world\n');
-}).listen(8000);
+        cluster.on('online', function (worker) {                     // Listen for workers online
+            console.log('Worker ' + worker.process.pid
+                + ' is online');
+        });
+
+        cluster.on('exit', function (worker, code, signal) {         // Listen for dying workers
+            console.log('Worker ' + worker.process.pid +
+                ' died with code: ' + code + ', and signal:'
+                + signal)
+            console.log('Starting a new worker');           // Replace the dead worker.
+            cluster.fork();
+        });
+
+    }
+    ;
+}
+
+else {                                         // Code to run if we're in a worker process:
+
+    var express = require('express');                   // Include Express
+    var app = express();                                // Create a new Express application
+
+    app.get('/', function (req, res) {                  // Add a basic route – index page
+        res.send('Hello World!');
+    });
+
+    app.listen(3000);                                   // Bind to a port
+    console.log('Application running!');
 }
